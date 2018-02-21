@@ -149,7 +149,7 @@ class emotion_classifier():
                                                ,[0,1,2,3]
                                                ,self.__corpus.multiclass.apply(int).tolist())
         checkpointer = ModelCheckpoint(filepath='weights.hdf5', verbose=1, save_best_only=True, monitor = 'val_acc')
-        self.__nnet.fit(X_train, y_train, epochs=500, batch_size=64, validation_data = [X_test,y_test], callbacks=[checkpointer], class_weight = class_weight)
+        self.__nnet.fit(X_train, y_train, epochs=50000, batch_size=64, validation_data = [X_test,y_test], callbacks=[checkpointer], class_weight = class_weight)
     
     def make_neural_net(self):
         self.__max_length = 15
