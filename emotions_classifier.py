@@ -11,8 +11,9 @@ import gensim
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, f1_score
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.linear_model import RidgeClassifier
 from keras import regularizers
 from keras.layers.convolutional import Conv1D
 from keras.layers.convolutional import MaxPooling1D
@@ -25,7 +26,8 @@ from keras.layers.embeddings import Embedding
 from keras.layers.recurrent import LSTM
 from keras.layers import Flatten
 from keras.utils.np_utils import to_categorical
-
+from keras.metrics import top_k_categorical_accuracy
+from keras.callbacks import Callback
 import pymorphy2
 import re
 from enum import Enum
@@ -41,6 +43,7 @@ class transform_types(Enum):
 class preprocess_options(Enum):
     SEQ = 1
     BOW = 2
+
 
 class emotion_classifier():
     def __init__(self):
@@ -69,15 +72,15 @@ class emotion_classifier():
     def __vectorize(self, vect_type):
         vd = {
                 vect_types.TF_IDF: TfidfVectorizer(ngram_range = (1,3), min_df = 3),
-                vect_types.COUNT: CountVectorizer(ngram_range = (1,3), min_df = 3)
+                vect_types.COUNT: CountVectorizer(ngram_range = (1,3), min_df = 10)
               }
         self.__vect = vd[vect_type].fit(self.__corpus.processed_ru)
-    
     def __transform_data(self, transform_type):
         if transform_type is transform_types.FREQ:
             self.__vectorize(vect_types.COUNT)
         self.__feats = self.__vect.transform(self.__corpus.processed_ru)
         self.__labels = self.__corpus.multiclass
+        return self.__feats, to_categorical(self.__corpus.multiclass)
 
     def __eval_model(self, y_train,y_test,y_train_pred,y_test_pred):
         class_names = ['excited,delighted,aroused,astonished',
@@ -109,43 +112,47 @@ class emotion_classifier():
         feats = sequence.pad_sequences(encoded_docs, maxlen=max_length)
         self.__tokenizer = t
         return feats, to_categorical(self.__corpus.multiclass)
+    
     def __make_single_sequence(self, text, max_length):
         encoded_doc = self.__tokenizer.texts_to_sequences([text])
         feats = sequence.pad_sequences(encoded_doc, maxlen=max_length)
         return feats
-    
+
     def __create_net(self, max_length):
         model = Sequential()
-        model.add(Embedding(self.__vocab_size, 50, 
+        model.add(Embedding(self.__vocab_size, 100, 
                             input_length=max_length,
-                            embeddings_regularizer = regularizers.l2(1e-5)))
-        model.add(Dropout(0.2))
-        model.add(Conv1D(filters=15, kernel_size=3, padding='same', activation='sigmoid'))
-        model.add(MaxPooling1D(pool_size=4))
-        model.add(Dropout(0.2))
-        model.add(LSTM(10, activation = 'tanh'))
-        model.add(Dropout(0.2))
+                            embeddings_regularizer = regularizers.l2(1e-4)))
+        model.add(Dropout(0.8))
+        model.add(Conv1D(filters=50, kernel_size=3,
+                         padding='same', activation='sigmoid'))
+        model.add(MaxPooling1D(pool_size=10))
+        model.add(Dropout(0.7))
+        model.add(LSTM(25, activation = 'relu'))
+        model.add(Dropout(0.4))
         model.add(Dense(4, activation='softmax'))
-        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy', self.__topkacc])
         self.__nnet = model
-    
+        
     def __prepare_net_data(self, preprocess_option, max_length):
         preprocess = {
                 preprocess_options.SEQ: self.__make_sequences(max_length),
-                preprocess_options.BOW: self.__vectorize(vect_type = vect_types.COUNT)
+                preprocess_options.BOW: 
+                    self.__transform_data(transform_types.FREQ)
                 }
         self.__netin, self.__netout = preprocess[preprocess_option]
-    
+    def __topkacc(self, y_true, y_pred):
+        return top_k_categorical_accuracy(y_true, y_pred, k = 2)
     def __train_net(self):
-        X_train, X_test, y_train, y_test = train_test_split(self.__netin, self.__netout, test_size=0.2)
+        X_train, X_test, y_train, y_test = train_test_split(self.__netin, self.__netout, test_size=0.1)
         class_weight = compute_class_weight('balanced'
                                                ,[0,1,2,3]
                                                ,self.__corpus.multiclass.apply(int).tolist())
         checkpointer = ModelCheckpoint(filepath='weights.hdf5', verbose=1, save_best_only=True, monitor = 'val_acc')
-        self.__nnet.fit(X_train, y_train, epochs=100, batch_size=500, validation_data = [X_test,y_test], callbacks=[checkpointer], class_weight = class_weight)
+        self.__nnet.fit(X_train, y_train, epochs=500, batch_size=64, validation_data = [X_test,y_test], callbacks=[checkpointer], class_weight = class_weight)
     
     def make_neural_net(self):
-        self.__max_length = 30
+        self.__max_length = 15
         self.__load_corpus('emo_bank_ru.csv')
         self.__prepare_net_data(preprocess_options.SEQ, self.__max_length)
         self.__create_net(self.__max_length)
