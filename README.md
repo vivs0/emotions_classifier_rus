@@ -19,7 +19,7 @@ The original dataset is JULIELab's [EmoBank](https://github.com/JULIELab/EmoBank
 
 This dataset contains about 10 000 english sentences evaluated by experts in Valence-Arousal-Dominance scale which provides mapping to basic emotions in the following manner ([G. Paltoglou et al](https://www.computer.org/csdl/trans/ta/2013/01/tta2013010116-abs.html)):
 
-![]( https://doi.ieeecomputersociety.org/cms/Computer.org/dl/trans/ta/2013/01/figures/tta20130101161.gif =500x)
+![ss]( https://github.com/zaphodbbrx/emotions_classifier_rus/blob/master/img/valence-arousal.gif =500x)
 
 In order to use this dataset for russian texts each sentence from it was tokenized ( nltk's StringTokenizer), lemmatized (WordNetLemmatizer) and finally translated word-by-word to russian via google.translate api.
 
