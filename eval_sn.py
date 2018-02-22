@@ -5,6 +5,12 @@ Created on Mon Feb 19 12:36:22 2018
 
 @author: lsm
 """
+import pandas as pd
+from emotions_classifier import *
+
+ec = EmotionsClassifier()
+ec.load_neural_net('default')
+#ec.load_checkpoint()
 excited_val = pd.read_csv('excited10.csv')
 calm_val = pd.read_csv('calm10.csv')
 angry_val = pd.read_csv('angry10.csv')
