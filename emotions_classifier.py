@@ -27,9 +27,12 @@ from keras.layers.recurrent import LSTM
 from keras.layers import Flatten
 from keras.utils.np_utils import to_categorical
 from keras.metrics import top_k_categorical_accuracy
+from keras.models import model_from_json
+
 from keras.callbacks import Callback
 import pymorphy2
 import re
+import pickle
 from enum import Enum
 
 
@@ -45,9 +48,9 @@ class preprocess_options(Enum):
     BOW = 2
 
 
-class emotion_classifier():
+class EmotionsClassifier():
     def __init__(self):
-        pass
+        self.__max_length = 128
     
     def __apply_class2mood(self):
         class2mood = {
@@ -122,16 +125,16 @@ class emotion_classifier():
         model = Sequential()
         model.add(Embedding(self.__vocab_size, 100, 
                             input_length=max_length,
-                            embeddings_regularizer = regularizers.l2(1e-4)))
-        model.add(Dropout(0.8))
+                            embeddings_regularizer = regularizers.l2(1e-5)))
+        model.add(Dropout(0.7))
         model.add(Conv1D(filters=50, kernel_size=3,
                          padding='same', activation='sigmoid'))
         model.add(MaxPooling1D(pool_size=10))
-        model.add(Dropout(0.7))
-        model.add(LSTM(25, activation = 'relu'))
         model.add(Dropout(0.4))
+        model.add(LSTM(25, activation = 'relu'))
+        model.add(Dropout(0.2))
         model.add(Dense(4, activation='softmax'))
-        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy', self.__topkacc])
+        model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['categorical_accuracy', self.__top_2_acc])
         self.__nnet = model
         
     def __prepare_net_data(self, preprocess_option, max_length):
@@ -141,18 +144,17 @@ class emotion_classifier():
                     self.__transform_data(transform_types.FREQ)
                 }
         self.__netin, self.__netout = preprocess[preprocess_option]
-    def __topkacc(self, y_true, y_pred):
+    def __top_2_acc(self, y_true, y_pred):
         return top_k_categorical_accuracy(y_true, y_pred, k = 2)
     def __train_net(self):
         X_train, X_test, y_train, y_test = train_test_split(self.__netin, self.__netout, test_size=0.1)
         class_weight = compute_class_weight('balanced'
                                                ,[0,1,2,3]
                                                ,self.__corpus.multiclass.apply(int).tolist())
-        checkpointer = ModelCheckpoint(filepath='weights.hdf5', verbose=1, save_best_only=True, monitor = 'val_acc')
-        self.__nnet.fit(X_train, y_train, epochs=50000, batch_size=64, validation_data = [X_test,y_test], callbacks=[checkpointer], class_weight = class_weight)
+        checkpointer = ModelCheckpoint(filepath='checkpoint.hdf5', verbose=1, save_best_only=True, monitor = 'val_loss')
+        self.__nnet.fit(X_train, y_train, epochs=100, batch_size=64, validation_data = [X_test,y_test], callbacks=[checkpointer], class_weight = class_weight)
     
     def make_neural_net(self):
-        self.__max_length = 15
         self.__load_corpus('emo_bank_ru.csv')
         self.__prepare_net_data(preprocess_options.SEQ, self.__max_length)
         self.__create_net(self.__max_length)
@@ -191,11 +193,28 @@ class emotion_classifier():
         pred_class = self.__nnet.predict(feats)
         print('text: %s\nclassified as %s'%(text, class_names[np.argmax(pred_class[0])]))
         return class_names[np.argmax(pred_class[0])]
-    
+    def save_neural_net(self, filename):
+        net_json = self.__nnet.to_json()
+        with open(filename+'.json', "w") as json_file:
+            json_file.write(net_json)
+        self.__nnet.save_weights(filename+'.h5')
+        with open(filename + '_tokenizer.pkl', 'wb') as output:
+            pickle.dump(self.__tokenizer, output, pickle.HIGHEST_PROTOCOL)
+    def load_neural_net(self, filename):
+        json_file = open(filename+'.json', 'r')
+        loaded_model_json = json_file.read()
+        json_file.close()
+        self.__nnet = model_from_json(loaded_model_json)
+        self.__nnet.load_weights(filename+".h5")
+        with open(filename+'_tokenizer.pkl', 'rb') as inp:
+            self.__tokenizer = pickle.load(inp)
+    def load_checkpoint(self):
+        self.__nnet.load_weights('checkpoint.hdf5')
 if __name__ == '__main__':
-    ec = emotion_classifier()
+    ec = EmotionsClassifier()
     ec.make_neural_net()
     ec.run_neural_network('Наконец-то лето!')
     ec.run_neural_network('Ну и кто они после этого?!')
     ec.run_neural_network('Только приехали и уже уезжают. Уже скучаааю')
     ec.run_neural_network('Неча на зеркало пенять коль рожа крива')
+    ec.save_neural_net('default')
