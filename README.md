@@ -1,10 +1,10 @@
 # Emtions Classifier RUS
 
-Neural network based emotions recognition for russian texts
+Neural network based emotions recognition for russian texts.
 
 ### 1. Overview
 
-This quiet simple module provides a python class for training, evaluating and applying deep neural network on the task of emotions recognition from text data. It may be implemented in various NLP problems such as chatbots building or social media mining. 
+This quiet simple module is a part of universal AI platform developed by [GraphGrail](https://en.graphgrail.com/). It provides a python class for training, evaluating and applying deep neural network on the task of emotions recognition from text data. It may be implemented in various NLP problems such as chatbots building or social media mining. 
 
 It has to be said that the field of textual emotion detection is still very new, especially speaking of russian texts. Therefore, model's performance provides a great room for improvement.
 
@@ -57,6 +57,5 @@ The main functions in emotion_classifier class are:
 * **make_neural_net**: prepares data, generates Keras sequential model and trains it
 * **run_classifier**: applies baseline model to some sample text (make_classifier must be run before this function)
 * **run_neural_network**: applies neural network model to some sample text (make_neural_net must be run before this function)
-
 
 
